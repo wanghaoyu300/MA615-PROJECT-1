@@ -1,0 +1,427 @@
+---
+title: "MA615 PROJECT1"
+author: "SIMON WANG"
+date: "9/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+
+knitr::opts_chunk$set(echo = FALSE)
+
+opts_chunk$set(echo = TRUE)
+
+library(Rmisc)
+library(tidyverse)
+library(corrplot)
+library(lubridate)
+library(GGally)
+
+```
+
+## Download Data
+
+Download Historical data from NOAA National Data Buoy Center. Read data ofNDBC Station 44013, years from 1987 to 2019.
+<<<<<<< HEAD
+Because these txt files have different column names, the initial data is separated into 5 data frames. 
+```{r echo=FALSE}
+# echo=FALSE
+
+
+url1 <- "https://www.ndbc.noaa.gov/view_text_file.php?filename=44013h"
+url2 <- ".txt.gz&dir=data/historical/stdmet/"
+years <- c(1987:2019)
+urls <- str_c(url1, years, url2, sep = "")
+```
+
+Because these txt files have different column names, the initial data is separated into 5 data frames.
+Take 1987 - 1998 as example. Their original column names are:
+
+```{r include=FALSE}
+# 87-98 original: 16 variables | data1 15 variables
+merge.data1 <-read_table2(urls[1],col_names = TRUE)
+for (i in 2:12){
+  new.data <- read_table2(urls[i],col_names = TRUE)
+  merge.data1 <- rbind(merge.data1,new.data)
+}
+```
+
+```{r}
+colnames(merge.data1)
+```
+
+Combine its date variables into DATE, and time variables into TIME, Add an new variable as MONTH for future group.
+
+```{r include=FALSE}
+
+YY <- rep("19",nrow(merge.data1))
+mm <- rep("00",nrow(merge.data1))
+DATE <- str_c(YY,merge.data1$YY,merge.data1$MM,merge.data1$DD)
+DATE <- ymd(DATE)
+MONTH <- round_date(DATE, "month")
+TIME <- hms::hms(min= as.numeric(mm),
+                 hours = as.numeric(merge.data1$hh))
+
+merge.data1 <- merge.data1[,-c(1:4)]
+merge.data1 <- cbind(DATE,MONTH,TIME,merge.data1)
+```
+
+```{r}
+colnames(merge.data1)
+```
+
+Do the same with the next 4 data frames.
+
+```{r include=FALSE}
+# 99 original: 16 variables | data2 15 variables
+merge.data2 <-read_table2(urls[13],col_names = TRUE)
+mm <- rep("00",nrow(merge.data2))
+DATE <- str_c(merge.data2$YYYY,merge.data2$MM,merge.data2$DD)
+DATE <- ymd(DATE)
+MONTH <- round_date(DATE, "month")
+TIME <- hms::hms(min= as.numeric(mm),
+                 hours = as.numeric(merge.data2$hh))
+merge.data2 <- merge.data2[,-c(1:4)]
+merge.data2 <- cbind(DATE,MONTH,TIME,merge.data2)
+
+# 00-04 original: 17 variables | data3 16 variables
+merge.data3 <-read_table2(urls[14],col_names = TRUE)
+for (i in 15:18){
+  new.data <- read_table2(urls[i],col_names = TRUE)
+  merge.data3 <- rbind(merge.data3,new.data)
+}
+mm <- rep("00",nrow(merge.data3))
+DATE <- str_c(merge.data3$YYYY,merge.data3$MM,merge.data3$DD)
+DATE <- ymd(DATE)
+MONTH <- round_date(DATE, "month")
+TIME <- hms::hms(min= as.numeric(mm),
+                 hours = as.numeric(merge.data3$hh))
+
+merge.data3 <- merge.data3[,-c(1:4)]
+merge.data3 <- cbind(DATE,MONTH,TIME,merge.data3)
+
+
+# 05-06 original: 17 variables | data4 16 variables
+merge.data4 <-read_table2(urls[19],col_names = TRUE)
+new.data <- read_table2(urls[20],col_names = TRUE)
+merge.data4 <- rbind(merge.data4,new.data)
+mm <- as.numeric(merge.data4$mm)
+mean(mm)
+
+DATE <- str_c(merge.data4$YYYY,merge.data4$MM,merge.data4$DD)
+DATE <- ymd(DATE)
+MONTH <- round_date(DATE, "month")
+TIME <- hms::hms(min= as.numeric(mm),
+                 hours = as.numeric(merge.data4$hh))
+
+merge.data4 <- merge.data4[,-c(1:5)]
+merge.data4 <- cbind(DATE,MONTH,TIME,merge.data4)
+
+
+# 07-19 original: 17 variables | data5 16 variables
+merge.data5 <-read_table2(urls[21],col_names = TRUE)
+merge.data5 <- merge.data5[-1,]
+for (i in 22:33){
+  new.data <- read_table2(urls[i],col_names = TRUE)
+  new.data <- new.data[-1,]
+  merge.data5 <- rbind(merge.data5,new.data)
+}
+mm <- as.numeric(merge.data5$mm)
+mean(mm)
+
+DATE <- str_c(merge.data5$`#YY`,merge.data5$MM,merge.data5$DD)
+DATE <- ymd(DATE)
+MONTH <- round_date(DATE, "month")
+TIME <- hms::hms(min= as.numeric(mm),
+                 hours = as.numeric(merge.data5$hh))
+
+merge.data5 <- merge.data5[,-c(1:5)]
+merge.data5 <- cbind(DATE,MONTH,TIME,merge.data5)
+```
+
+## Combine data frames.
+
+After change the date and time variables, we can combine 5 data frames into 3. Print the column names to find the difference.
+
+```{r echo=FALSE}
+data_87_99 <- rbind(merge.data1,merge.data2)
+data_00_06 <- rbind(merge.data3,merge.data4)
+data_07_19 <- merge.data5
+```
+
+```{r echo=FALSE}
+colnames(data_87_99)
+colnames(data_00_06)
+colnames(data_07_19)
+```
+
+From the definition on NOAA National Data Buoy Center Website, we find the "BAR" is the historic name of "PRES". Change the column name for data before 2007.
+
+```{r echo=TRUE}
+names(data_87_99)[names(data_87_99)=="BAR"]="PRES"
+names(data_00_06)[names(data_00_06)=="BAR"]="PRES"
+```
+
+Add NA for TIDE, WDIR and WD to the data frame as a missing value to make their names as each other. Then combine the data frames into one.
+
+```{r include=FALSE}
+
+TIDE <- rep(NA,nrow(data_87_99))
+data_87_99<-cbind(data_87_99,TIDE)
+
+WDIR <- rep(NA,nrow(data_87_99))
+data_87_99<-cbind(data_87_99[,1:4],WDIR,data_87_99[,5:16])
+WDIR <- rep(NA,nrow(data_00_06))
+data_00_06<-cbind(data_00_06[,1:4],WDIR,data_00_06[,5:16])
+WD <- rep(NA,nrow(data_07_19))
+data_07_19<-cbind(data_07_19[,1:3],WD,data_07_19[,4:16])
+```
+
+```{r}
+data_87_19 <- rbind(data_87_99,data_00_06,data_07_19)
+```
+
+```{r include=FALSE}
+str(data_87_19)
+```
+
+Convert the data from character into numeric.
+
+```{r echo=FALSE}
+for (i in 3:16){
+  data_87_19[,i] <- as.numeric(data_87_19[,i])
+}
+```
+
+```{r}
+str(data_87_19)
+```
+
+There are some data like "9999", "999", "99", which seems impossible value. They are actually missing value. Replace them with NA. 
+
+```{r}
+summary(data_87_19,na.rm = TRUE)
+```
+
+```{r echo=FALSE}
+data_87_19$WD[data_87_19$WD==999] <- NA
+data_87_19$WDIR[data_87_19$WDIR==999] <- NA
+data_87_19$WSPD[data_87_19$WSPD==99] <- NA
+data_87_19$GST[data_87_19$GST==99] <- NA
+data_87_19$WVHT[data_87_19$WVHT==99] <- NA
+data_87_19$DPD[data_87_19$DPD==99] <- NA
+data_87_19$APD[data_87_19$APD==99] <- NA
+data_87_19$MWD[data_87_19$MWD==999] <- NA
+data_87_19$PRES[data_87_19$PRES==9999] <- NA
+data_87_19$ATMP[data_87_19$ATMP==999] <- NA
+data_87_19$WTMP[data_87_19$WTMP==999] <- NA
+data_87_19$DEWP[data_87_19$DEWP==999] <- NA
+data_87_19$VIS[data_87_19$VIS==99] <- NA
+data_87_19$TIDE[data_87_19$TIDE==99] <- NA
+
+```
+
+```{r}
+summary(data_87_19,na.rm = TRUE)
+```
+
+Save data as BuoyData.Rdata
+
+```{r}
+save(data_87_19,file='BuoyData.Rdata')
+```
+
+## Data Select
+
+According to the summary, there are over 10,000 NAs in variables "WD", "WDIR", "MWD", "VIS", "TIDE" and "DEWP", so we select other variables from the data frame.
+
+```{r include=FALSE}
+load("BuoyData.Rdata")
+tmpdata  <-  data_87_19[ , !names(data_87_19) %in% c("WD","WDIR","MWD","VIS","TIDE","DEWP")]
+```
+
+```{r warning=FALSE, include=FALSE}
+planes <-  group_by(tmpdata, DATE)
+delay  <-  summarise(planes, WSPD = mean(WSPD, na.rm = TRUE),
+                     GST = mean(GST, na.rm = TRUE), 
+                     WVHT = mean(WVHT, na.rm = TRUE), 
+                     DPD = mean(DPD, na.rm = TRUE),
+                     APD = mean(APD, na.rm = TRUE), 
+                     PRES = mean(PRES, na.rm = TRUE),
+                     ATMP = mean(ATMP, na.rm = TRUE), 
+                     WTMP = mean(WTMP, na.rm = TRUE))
+
+# delay2: mean by month with NA
+planes2 <-  group_by(tmpdata, MONTH)
+delay2  <-  summarise(planes2, WSPD = mean(WSPD, na.rm = TRUE),
+                      GST = mean(GST, na.rm = TRUE), 
+                      WVHT = mean(WVHT, na.rm = TRUE), 
+                      DPD = mean(DPD, na.rm = TRUE),
+                      APD = mean(APD, na.rm = TRUE), 
+                      PRES = mean(PRES, na.rm = TRUE),
+                      ATMP = mean(ATMP, na.rm = TRUE), 
+                      WTMP = mean(WTMP, na.rm = TRUE))
+```
+
+Remove rows with NA, group the data by day(month), calculate the mean value of variables by day(month).
+
+```{r echo=TRUE, warning=FALSE}
+tmpdata  <-  na.omit(tmpdata)
+planes3 <-  group_by(tmpdata, DATE)
+delay3  <-  summarise(planes3, WSPD = mean(WSPD, na.rm = TRUE),
+                      GST = mean(GST, na.rm = TRUE), 
+                      WVHT = mean(WVHT, na.rm = TRUE), 
+                      DPD = mean(DPD, na.rm = TRUE),
+                      APD = mean(APD, na.rm = TRUE), 
+                      PRES = mean(PRES, na.rm = TRUE),
+                      ATMP = mean(ATMP, na.rm = TRUE), 
+                      WTMP = mean(WTMP, na.rm = TRUE))
+```
+
+Delay3 is the data frame grouped by day.
+
+```{r}
+head(delay3,n=3)
+```
+
+```{r echo=TRUE, warning=FALSE}
+planes4 <-  group_by(tmpdata, MONTH)
+delay4  <-  summarise(planes4, WSPD = mean(WSPD, na.rm = TRUE),
+                      GST = mean(GST, na.rm = TRUE), 
+                      WVHT = mean(WVHT, na.rm = TRUE), 
+                      DPD = mean(DPD, na.rm = TRUE),
+                      APD = mean(APD, na.rm = TRUE), 
+                      PRES = mean(PRES, na.rm = TRUE),
+                      ATMP = mean(ATMP, na.rm = TRUE), 
+                      WTMP = mean(WTMP, na.rm = TRUE))
+```
+
+Delay4 is the data frame grouped by month.
+
+```{r}
+head(delay4,n=3)
+```
+
+## Correlation between different variables
+
+We make plot correlation between these variables.
+
+```{r include=FALSE}
+cor_de <- cor(delay4[,2:9])
+res_cor <- cor(cor_de)
+```
+
+```{r}
+corrplot(corr = res_cor,order = "AOE",type="upper",method="pie",tl.pos = "d",tl.cex = 0.75,tl.col = "pink")
+corrplot(corr = res_cor,add=TRUE, type="lower", method="number",order="AOE",diag=FALSE,tl.pos="n", cl.pos="n")
+
+```
+
+Plot variables in matrix, we can find ATMP have high correlation with WSPD, GST, WVHT and DPD.
+
+```{r echo=FALSE, warning=FALSE}
+smdata <- data.frame(delay3[2:9])
+ggscatmat(smdata) + theme_bw(base_family = "STKaiti") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "",y = "")
+
+```
+
+Plot the relationship between ATMP and WSPD, GST, WVHT and DPD with ggplot.
+
+```{r echo=FALSE}
+fit1 <- lm(data = delay3, ATMP ~ WSPD)
+p1 <- ggplot(data = delay3, aes(WSPD, ATMP))+
+          geom_point(color = "pink", alpha = 0.5, cex= 0.25)+
+          geom_abline(intercept = coef(fit1)[1],
+                    slope = coef(fit1)[2],
+                    color = "lightblue")+
+        labs(x = "WSPD", y = "ATMP")
+
+fit2 <- lm(data = delay3, ATMP ~ GST)
+p2 <- ggplot(data = delay3, aes(GST, ATMP))+
+          geom_point(color = "pink", alpha = 0.5, cex= 0.25)+
+          geom_abline(intercept = coef(fit2)[1],
+              slope = coef(fit2)[2],
+              color = "lightblue")+
+        labs(x = "GST", y = "ATMP")
+
+fit3 <- lm(data = delay3, ATMP ~ WVHT)
+p3 <- ggplot(data = delay3, aes(WVHT, ATMP))+
+          geom_point(color = "pink", alpha = 0.5, cex= 0.25)+
+          geom_abline(intercept = coef(fit3)[1],
+              slope = coef(fit3)[2],
+              color = "lightblue")+
+        labs(x = "WVHT", y = "ATMP")
+
+fit4 <- lm(data = delay3, ATMP ~ DPD)
+p4 <- ggplot(data = delay3, aes(DPD, ATMP))+
+  geom_point(color = "pink", alpha = 0.5, cex= 0.25)+
+  geom_abline(intercept = coef(fit4)[1],
+              slope = coef(fit4)[2],
+              color = "lightblue")+
+  labs(x = "DPD", y = "ATMP")
+
+
+multiplot(p1, p2, p3, p4, cols = 2)
+
+```
+
+# Time and Temperature
+
+Plot the Date and Temperature, add smooth line to show the trends.
+
+```{r echo=FALSE}
+#plot(delay$DATE,delay$ATMP,type = "l")
+ggplot(data = delay, aes(x = DATE, y = ATMP))+
+  geom_line(col = "pink")+
+  geom_smooth(method = lm, formula = y ~ x, col = "lightblue")
+
+```
+
+Plot a heatmap to show the trends of temperature with DATE.
+
+```{r echo=FALSE, warning=FALSE}
+year <- year(delay2$MONTH)
+month <- month(delay2$MONTH)
+aveTEM <- delay2$ATMP
+Tdata <- data.frame(year, month, aveTEM)
+names(Tdata) <- c("year","month","MeanTemp")
+
+# heat map
+ggplot(data=Tdata, aes(x=year,y=month)) + 
+  theme_bw(base_family = "STKaiti") +
+  geom_tile(aes(fill = MeanTemp),colour = "white") + 
+## geom_text(aes(label = round(MeanTemp,1))) +
+  scale_fill_gradientn(colours=rev(RColorBrewer::brewer.pal(10,'Spectral'))) + 
+  theme(legend.title=element_blank(),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        legend.position="top") + 
+  ggtitle("Mean Temp") +
+  labs(x="Year",y = "Month") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+Do regression of Temperature of DATE:
+
+```{r}
+fit_date<-lm(data=delay3, ATMP~DATE)
+summary(fit_date)
+```
+
+```{r}
+coef(fit_date)
+```
+
+We can see the slop is small, but the p-value shows this coefficient is significantly different from zero!
+
+## Conclusion
+
+The temperature is raising by time!
+
+It can be seen from the figure and the slop coefficient that although the daily temperature increase is tiny, after 30 years of continuous accumulation, the global average temperature has risen by over 2 degrees, which means that the global temperature will rise by nearly 7 degrees within a century. This is a significant increment.
+
+
